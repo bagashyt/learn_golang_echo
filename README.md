@@ -1,6 +1,6 @@
-# Middleware and Logging on Echo Framework
+# Advance Configuration with Viper
 
-A simple Middleware and Logging on Echo Framework
+Using [Viper]("http://github.com/spf13/viper") for Configuration
 
 ## How to run program
 
