@@ -1,6 +1,6 @@
-# Secure Cookie with Gorilla Session
+# Secure Cookie with Gorilla Securecookie
 
-Using [Gorilla Session]("https://github.com/gorilla/sessions") for Secure Cookie
+Using [Gorilla Securecookie](https://github.com/gorilla/securecookie") for Secure Cookie
 
 ## How to run program
 
