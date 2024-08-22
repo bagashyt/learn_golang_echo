@@ -1,6 +1,6 @@
-# Advance Configuration with Viper
+# Secure Cookie with Gorilla Session
 
-Using [Viper]("http://github.com/spf13/viper") for Configuration
+Using [Gorilla Session]("https://github.com/gorilla/sessions") for Secure Cookie
 
 ## How to run program
 
