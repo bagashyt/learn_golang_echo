@@ -1,6 +1,6 @@
-# Cross-Site Request Forgery (CSRF)
+# Secure Middleware
 
-handling Cross-Site Request Forgery (CSRF)["https://en.wikipedia.org/wiki/Cross-site_request_forgery"]
+handle secure middleware using (Secure)['https://github.com/unrolled/secure.]
 
 ## How to run program
 
@@ -8,14 +8,6 @@ On terminal type
 ```sh
 go run .
 ```
-On Browser type
-`http://localhost:9000/index`
 
-Test with curl
-```
-curl -X POST http://localhost:9000/sayhello \
-     -H 'Content-Type: application/json' \
-     -d '{"name":"myname","gender":"male"}'
-```
 
 

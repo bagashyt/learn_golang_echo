@@ -1,44 +1,30 @@
 package main
 
 import (
-	"fmt"
-	"html/template"
 	"net/http"
 
 	"github.com/labstack/echo"
-	"github.com/labstack/echo/middleware"
+	"github.com/unrolled/secure"
 )
 
-type M map[string]interface{}
-
 func main() {
-	tmpl := template.Must(template.ParseGlob("./*.html"))
-
 	e := echo.New()
 
-	const CSRFTokenHeader = "X-CSRF-Token"
-	const CSRFKey = "csrf"
-
-	e.Use(middleware.CSRFWithConfig(middleware.CSRFConfig{
-		TokenLookup: "header:" + CSRFTokenHeader,
-		ContextKey:  CSRFKey,
-	}))
-
-	e.GET("/index", func(ctx echo.Context) error {
-		data := make(M)
-		data[CSRFKey] = ctx.Get(CSRFKey)
-		return tmpl.Execute(ctx.Response(), data)
+	secureMiddleware := secure.New(secure.Options{
+		AllowedHosts:            []string{"localhost:9000", "www.google.com"},
+		FrameDeny:               true,
+		CustomFrameOptionsValue: "SAMEORIGIN",
+		ContentTypeNosniff:      true,
+		BrowserXssFilter:        true,
 	})
 
-	e.POST("/sayhello", func(c echo.Context) error {
-		data := make(M)
-		if err := c.Bind(&data); err != nil {
-			return err
-		}
+	e.Use(echo.WrapMiddleware(secureMiddleware.Handler))
 
-		message := fmt.Sprintf("hello %s", data["name"])
-		return c.JSON(http.StatusOK, message)
+	e.GET("/index", func(c echo.Context) error {
+		c.Response().Header().Set("Access-Control-Allow-Origin", "*")
+
+		return c.String(http.StatusOK, "Hello")
 	})
 
-	e.Logger.Fatal(e.Start(":9000"))
+	e.Logger.Fatal(e.StartTLS(":9000", "server.crt", "server.key"))
 }
