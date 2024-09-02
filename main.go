@@ -57,7 +57,6 @@ func main() {
 
 func newPostgresStore() *pgstore.PGStore {
 	url := "postgres://myuser:rahasia@127.0.0.1:5432/mydb?sslmode=disable"
-	// url2 := "postgresql://localhost/mydb?user=myuser&password=rahasia"
 	authKey := []byte("my-auth-key-very-secret")
 	encryptionKey := []byte("my-encryption-key-very-secret123")
 
