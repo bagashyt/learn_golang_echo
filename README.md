@@ -1,6 +1,6 @@
-# Secure Middleware
+# HTTP Gzip Compression
 
-handle secure middleware using (Secure)['https://github.com/unrolled/secure.]
+HTTP Compression using (gziphandler)['github.com/NYTimes/gziphandler']
 
 ## How to run program
 

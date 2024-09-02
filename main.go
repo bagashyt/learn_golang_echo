@@ -1,30 +1,35 @@
 package main
 
 import (
+	"io"
 	"net/http"
+	"os"
 
-	"github.com/labstack/echo"
-	"github.com/unrolled/secure"
+	"github.com/NYTimes/gziphandler"
 )
 
 func main() {
-	e := echo.New()
+	mux := new(http.ServeMux)
 
-	secureMiddleware := secure.New(secure.Options{
-		AllowedHosts:            []string{"localhost:9000", "www.google.com"},
-		FrameDeny:               true,
-		CustomFrameOptionsValue: "SAMEORIGIN",
-		ContentTypeNosniff:      true,
-		BrowserXssFilter:        true,
+	mux.HandleFunc("/image", func(w http.ResponseWriter, r *http.Request) {
+		f, err := os.Open("sample.png")
+		if f != nil {
+			defer f.Close()
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		_, err = io.Copy(w, f)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 
-	e.Use(echo.WrapMiddleware(secureMiddleware.Handler))
+	server := new(http.Server)
+	server.Addr = ":9000"
+	server.Handler = gziphandler.GzipHandler(mux)
 
-	e.GET("/index", func(c echo.Context) error {
-		c.Response().Header().Set("Access-Control-Allow-Origin", "*")
-
-		return c.String(http.StatusOK, "Hello")
-	})
-
-	e.Logger.Fatal(e.StartTLS(":9000", "server.crt", "server.key"))
+	server.ListenAndServe()
 }
