@@ -2,38 +2,30 @@ package main
 
 import (
 	"log"
-	"os"
-
-	"github.com/SebastiaanKlippert/go-wkhtmltopdf"
+	"net/http"
 )
 
+func StartNonTKSServer() {
+	mux := new(http.ServeMux)
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Println("Redirecting to https://localhost/")
+		http.Redirect(w, r, "https://localhost/", http.StatusTemporaryRedirect)
+	}))
+
+	http.ListenAndServe(":80", mux)
+}
+
 func main() {
-	pdfg, err := wkhtmltopdf.NewPDFGenerator()
+	go StartNonTKSServer()
+
+	mux := new(http.ServeMux)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Hello World!"))
+	})
+
+	log.Println("Server started at :443")
+	err := http.ListenAndServeTLS(":443", "server.crt", "server.key", mux)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
-
-	f, err := os.Open("./input.html")
-
-	if f != nil {
-		defer f.Close()
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	pdfg.AddPage(wkhtmltopdf.NewPageReader(f))
-	pdfg.Orientation.Set(wkhtmltopdf.OrientationPortrait)
-	pdfg.Dpi.Set(300)
-
-	err = pdfg.Create()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = pdfg.WriteFile("./output.pdf")
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("Done")
 }
