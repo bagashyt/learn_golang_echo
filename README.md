@@ -1,6 +1,6 @@
-# HTTP Gzip Compression
+# Send Mail
 
-HTTP Compression using (gziphandler)['github.com/NYTimes/gziphandler']
+Send email with golang using (gomail)[https://gopkg.in/gomail.v2]
 
 ## How to run program
 
