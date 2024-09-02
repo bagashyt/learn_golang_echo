@@ -1,26 +1,43 @@
 package main
 
 import (
+	"fmt"
+	"html/template"
 	"net/http"
 
 	"github.com/labstack/echo"
-	"github.com/rs/cors"
+	"github.com/labstack/echo/middleware"
 )
 
+type M map[string]interface{}
+
 func main() {
+	tmpl := template.Must(template.ParseGlob("./*.html"))
+
 	e := echo.New()
 
-	corsMiddleware := cors.New(cors.Options{
-		AllowedOrigins: []string{"https:/novalagung.com", "https://www.google.com"},
-		AllowedMethods: []string{"OPTIONS", "GET", "POST", "PUT"},
-		AllowedHeaders: []string{"Content-type", "X-CSRF-Token"},
-		Debug:          true,
-	})
+	const CSRFTokenHeader = "X-CSRF-Token"
+	const CSRFKey = "csrf"
 
-	e.Use(echo.WrapMiddleware(corsMiddleware.Handler))
+	e.Use(middleware.CSRFWithConfig(middleware.CSRFConfig{
+		TokenLookup: "header:" + CSRFTokenHeader,
+		ContextKey:  CSRFKey,
+	}))
 
 	e.GET("/index", func(ctx echo.Context) error {
-		return ctx.String(http.StatusOK, "hello")
+		data := make(M)
+		data[CSRFKey] = ctx.Get(CSRFKey)
+		return tmpl.Execute(ctx.Response(), data)
+	})
+
+	e.POST("/sayhello", func(c echo.Context) error {
+		data := make(M)
+		if err := c.Bind(&data); err != nil {
+			return err
+		}
+
+		message := fmt.Sprintf("hello %s", data["name"])
+		return c.JSON(http.StatusOK, message)
 	})
 
 	e.Logger.Fatal(e.Start(":9000"))
