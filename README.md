@@ -1,6 +1,6 @@
-# Read Write XLSX File
+# Write PDF File
 
-Read and write Xlsx with golang using (Excelize)[github.com/360EntSecGroup-Skylar/excelize]
+Write PDF file with golang using (gofpdf)[github.com/jung-kurt/gofpdf]
 
 ## How to run program
 
