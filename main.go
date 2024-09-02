@@ -1,69 +1,27 @@
 package main
 
 import (
-	"fmt"
-	"log"
 	"net/http"
-	"os"
 
-	"github.com/antonlindstrom/pgstore"
-	"github.com/gorilla/context"
 	"github.com/labstack/echo"
+	"github.com/rs/cors"
 )
 
-const SESSION_ID = "id"
-
 func main() {
-
-	store := newPostgresStore()
-
 	e := echo.New()
-	e.Use(echo.WrapMiddleware(context.ClearHandler))
 
-	e.GET("/set", func(ctx echo.Context) error {
-		session, _ := store.Get(ctx.Request(), SESSION_ID)
-		session.Values["message1"] = "hello"
-		session.Values["message2"] = "world"
-		session.Save(ctx.Request(), ctx.Response())
-
-		return ctx.Redirect(http.StatusTemporaryRedirect, "/get")
+	corsMiddleware := cors.New(cors.Options{
+		AllowedOrigins: []string{"https:/novalagung.com", "https://www.google.com"},
+		AllowedMethods: []string{"OPTIONS", "GET", "POST", "PUT"},
+		AllowedHeaders: []string{"Content-type", "X-CSRF-Token"},
+		Debug:          true,
 	})
 
-	e.GET("/get", func(ctx echo.Context) error {
-		session, _ := store.Get(ctx.Request(), SESSION_ID)
+	e.Use(echo.WrapMiddleware(corsMiddleware.Handler))
 
-		if len(session.Values) == 0 {
-			return ctx.String(http.StatusOK, "empty result")
-		}
-
-		return ctx.String(http.StatusOK, fmt.Sprintf(
-			"%s %s",
-			session.Values["message1"],
-			session.Values["message2"],
-		))
-
-	})
-
-	e.GET("/delete", func(ctx echo.Context) error {
-		session, _ := store.Get(ctx.Request(), SESSION_ID)
-		session.Options.MaxAge = -1
-		session.Save(ctx.Request(), ctx.Response())
-
-		return ctx.Redirect(http.StatusTemporaryRedirect, "/get")
+	e.GET("/index", func(ctx echo.Context) error {
+		return ctx.String(http.StatusOK, "hello")
 	})
 
 	e.Logger.Fatal(e.Start(":9000"))
-}
-
-func newPostgresStore() *pgstore.PGStore {
-	url := "postgres://myuser:rahasia@127.0.0.1:5432/mydb?sslmode=disable"
-	authKey := []byte("my-auth-key-very-secret")
-	encryptionKey := []byte("my-encryption-key-very-secret123")
-
-	store, err := pgstore.NewPGStore(url, authKey, encryptionKey)
-	if err != nil {
-		log.Println("ERROR", err)
-		os.Exit(0)
-	}
-	return store
 }
