@@ -2,20 +2,38 @@ package main
 
 import (
 	"log"
+	"os"
 
-	"github.com/jung-kurt/gofpdf"
+	"github.com/SebastiaanKlippert/go-wkhtmltopdf"
 )
 
 func main() {
-	pdf := gofpdf.New("P", "mm", "A4", "")
-	pdf.AddPage()
-	pdf.SetFont("Arial", "B", 16)
-	pdf.Text(40, 10, "Hello, world")
-	pdf.Image("./sample.png", 56, 40, 100, 0, false, "", 0, "")
-
-	err := pdf.OutputFileAndClose("./file.pdf")
+	pdfg, err := wkhtmltopdf.NewPDFGenerator()
 	if err != nil {
-		log.Println("ERROR", err.Error())
+		log.Fatal(err)
 	}
 
+	f, err := os.Open("./input.html")
+
+	if f != nil {
+		defer f.Close()
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	pdfg.AddPage(wkhtmltopdf.NewPageReader(f))
+	pdfg.Orientation.Set(wkhtmltopdf.OrientationPortrait)
+	pdfg.Dpi.Set(300)
+
+	err = pdfg.Create()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = pdfg.WriteFile("./output.pdf")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Done")
 }

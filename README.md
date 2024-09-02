@@ -1,6 +1,6 @@
-# Write PDF File
+# Convert HTML to PDF File
 
-Write PDF file with golang using (gofpdf)[github.com/jung-kurt/gofpdf]
+Conver HTML to PDF file with golang using (wkhtmltopdf)[github.com/jung-kurt/gofpdf]
 
 ## How to run program
 
