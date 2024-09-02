@@ -1,8 +1,6 @@
-# Send Mail
+# Read Write XLSX File
 
-Send email with golang using (gomail)[https://gopkg.in/gomail.v2]
-
-generate (app password)[https://myaccount.google.com/apppasswords] google
+Read and write Xlsx with golang using (Excelize)[github.com/360EntSecGroup-Skylar/excelize]
 
 ## How to run program
 
