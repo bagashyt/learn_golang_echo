@@ -1,77 +1,70 @@
 package main
 
 import (
+	"fmt"
+	"log"
 	"net/http"
-	"time"
+	"os"
 
-	"github.com/gorilla/securecookie"
+	"github.com/antonlindstrom/pgstore"
+	"github.com/gorilla/context"
 	"github.com/labstack/echo"
-	"github.com/novalagung/gubrak/v2"
 )
 
-type M map[string]interface{}
-
-var sc = securecookie.New([]byte("very-secret"), []byte("a-lot-secret-yay"))
+const SESSION_ID = "id"
 
 func main() {
 
-	const CookieName = "data"
+	store := newPostgresStore()
 
 	e := echo.New()
+	e.Use(echo.WrapMiddleware(context.ClearHandler))
 
-	e.GET("/index", func(ctx echo.Context) error {
-		data, err := getCookie(ctx, CookieName)
-		if err != nil && err != http.ErrNoCookie && err != securecookie.ErrMacInvalid {
-			return err
+	e.GET("/set", func(ctx echo.Context) error {
+		session, _ := store.Get(ctx.Request(), SESSION_ID)
+		session.Values["message1"] = "hello"
+		session.Values["message2"] = "world"
+		session.Save(ctx.Request(), ctx.Response())
+
+		return ctx.Redirect(http.StatusTemporaryRedirect, "/get")
+	})
+
+	e.GET("/get", func(ctx echo.Context) error {
+		session, _ := store.Get(ctx.Request(), SESSION_ID)
+
+		if len(session.Values) == 0 {
+			return ctx.String(http.StatusOK, "empty result")
 		}
 
-		if data == nil {
-			data = M{"message": "Hello", "ID": gubrak.RandomString(32)}
-
-			err = setCookie(ctx, CookieName, data)
-			if err != nil {
-				return err
-			}
-		}
-
-		return ctx.JSON(http.StatusOK, data)
+		return ctx.String(http.StatusOK, fmt.Sprintf(
+			"%s %s",
+			session.Values["message1"],
+			session.Values["message2"],
+		))
 
 	})
 
+	e.GET("/delete", func(ctx echo.Context) error {
+		session, _ := store.Get(ctx.Request(), SESSION_ID)
+		session.Options.MaxAge = -1
+		session.Save(ctx.Request(), ctx.Response())
+
+		return ctx.Redirect(http.StatusTemporaryRedirect, "/get")
+	})
+
 	e.Logger.Fatal(e.Start(":9000"))
-
 }
 
-func setCookie(c echo.Context, name string, data M) error {
-	encoded, err := sc.Encode(name, data)
+func newPostgresStore() *pgstore.PGStore {
+	url := "postgres://myuser:rahasia@127.0.0.1:5432/mydb?sslmode=disable"
+	// url2 := "postgresql://localhost/mydb?user=myuser&password=rahasia"
+	authKey := []byte("my-auth-key-very-secret")
+	encryptionKey := []byte("my-encryption-key-very-secret123")
+
+	store, err := pgstore.NewPGStore(url, authKey, encryptionKey)
 	if err != nil {
-		return err
+		log.Println("ERROR", err)
+		os.Exit(0)
 	}
-
-	cookie := &http.Cookie{
-		Name:     name,
-		Value:    encoded,
-		Path:     "/",
-		Secure:   false,
-		HttpOnly: true,
-		Expires:  time.Now().Add(1 * time.Hour),
-	}
-
-	http.SetCookie(c.Response(), cookie)
-
-	return nil
-}
-
-func getCookie(c echo.Context, name string) (M, error) {
-
-	cookie, err := c.Request().Cookie(name)
-
-	if err == nil {
-		data := M{}
-		if err = sc.Decode(name, cookie.Value, &data); err == nil {
-			return data, nil
-		}
-	}
-
-	return nil, err
+	return store
 }
