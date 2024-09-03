@@ -1,12 +1,17 @@
-# HTTPS/TLS Web Server
+# Advanced Client HTTP Request
 
-enable SSL/TLS for Web Server
+create server and client HTTP Request
 
 ## How to run program
 
 On terminal type 
 ```sh
-go run .
+go run server.go
+```
+
+On client directory & different terminal type 
+```sh
+go run client.go
 ```
 
 
