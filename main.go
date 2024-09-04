@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/bagashyt/learn_golang_echo/model"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 var user1 = &model.User{
@@ -46,4 +48,21 @@ func main() {
 
 	fmt.Printf("# === As String\n     %#v \n", user1.String())
 
+	// as JSON string
+	jsonb, err1 := protojson.Marshal(garageList)
+	if err1 != nil {
+		fmt.Println(err1.Error())
+		os.Exit(0)
+	}
+	fmt.Printf("# === As JSON String\n    %s \n", string(jsonb))
+
+	protoObject := new(model.GarageList)
+	err2 := protojson.Unmarshal(jsonb, protoObject)
+
+	if err2 != nil {
+		fmt.Println(err2.Error())
+		os.Exit(0)
+	}
+
+	fmt.Printf("# === As String\n     %s \n", protoObject.String())
 }
