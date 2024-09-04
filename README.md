@@ -1,45 +1,24 @@
-# GRPC and ProtoBuf
+# JSON Web Token (JWT)
 
-implement GRPC with protobuf
-
-## How to setup Protobuf on Ubuntu
-
-On terminal type 
-
-```sh
-sudo apt update
-sudo apt install protobuf-compiler
-```
-
-install protobuf runtime for Go
-
-```sh
-go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-```
-
-add PATH on ~/.bashrc
-
-`export PATH="$PATH:usr/local/go/bin"`
-
-
+implement JSON Web Token
 
 
 ## How to run program
 
-On service-garage directory terminal type 
+On terminal type 
 ```sh
-go run main.go
+go run .
 ```
 
-On service-user directory terminal type 
+## How to test
+
+with curl on terminal type:
+
 ```sh
-go run main.go
+curl -X POST --user noval:kaliparejaya123 http://localhost:8080/login
 ```
+after got the token you can use it to access /index
 
-On client directory terminal type 
 ```sh
-go run main.go
+curl -X GET --header "Authorization: Bearer <your Token>" http://localhost:8080/index
 ```
-
-
-

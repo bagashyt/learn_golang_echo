@@ -29,19 +29,18 @@ var JWT_SIGNING_METHOD = jwt.SigningMethodHS256
 var JWT_SIGNATURE_KEY = []byte("the secret of kalimdor")
 
 func main() {
-
 	mux := new(CustomMux)
 	mux.RegisterMiddleware(MiddlewareJWTAuthorization)
 
-	mux.HandleFunc("/login", HandlerLogin)
 	mux.HandleFunc("/index", HandlerIndex)
+	mux.HandleFunc("/login", HandlerLogin)
 
 	server := new(http.Server)
 	server.Handler = mux
 	server.Addr = ":8080"
 
 	fmt.Println("Starting server at", server.Addr)
-
+	server.ListenAndServe()
 }
 
 func HandlerIndex(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +90,6 @@ func HandlerLogin(w http.ResponseWriter, r *http.Request) {
 
 	tokenString, _ := json.Marshal(M{"token": signedToken})
 	w.Write([]byte(tokenString))
-
 }
 
 func authenticateUser(username, password string) (bool, M) {
@@ -107,7 +105,6 @@ func authenticateUser(username, password string) (bool, M) {
 
 	res := gubrak.From(data).Find(func(each M) bool {
 		return each["username"] == username && each["password"] == password
-
 	}).Result()
 
 	if res != nil {
@@ -121,6 +118,7 @@ func authenticateUser(username, password string) (bool, M) {
 
 func MiddlewareJWTAuthorization(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
 		if r.URL.Path == "/login" {
 			next.ServeHTTP(w, r)
 			return
@@ -134,12 +132,13 @@ func MiddlewareJWTAuthorization(next http.Handler) http.Handler {
 
 		tokenString := strings.Replace(authorizationHeader, "Bearer ", "", -1)
 
-		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
-			if method, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			if method, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("Signing method invalid")
 			} else if method != JWT_SIGNING_METHOD {
 				return nil, fmt.Errorf("Signing method invalid")
 			}
+
 			return JWT_SIGNATURE_KEY, nil
 		})
 		if err != nil {
