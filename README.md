@@ -1,6 +1,6 @@
-# ProtoBuf
+# GRPC and ProtoBuf
 
-install and learn how to use protobuf on Golang
+implement GRPC with protobuf
 
 ## How to setup Protobuf on Ubuntu
 
@@ -26,9 +26,20 @@ add PATH on ~/.bashrc
 
 ## How to run program
 
-On terminal type 
+On service-garage directory terminal type 
 ```sh
-go run .
+go run main.go
 ```
+
+On service-user directory terminal type 
+```sh
+go run main.go
+```
+
+On client directory terminal type 
+```sh
+go run main.go
+```
+
 
 
