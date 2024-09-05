@@ -1,84 +1,177 @@
 package main
 
 import (
-	"errors"
+	"context"
+	"database/sql"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"log"
-	"net/http"
+	"math"
 	"os"
-	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
-	chi "github.com/go-chi/chi/v5"
-	"golang.org/x/sync/singleflight"
+	_ "github.com/go-sql-driver/mysql"
 )
 
-var singleflightGroupDownloadReport singleflight.Group
+var (
+	dbConnString   = "root@/test"
+	dbMaxIdleConns = 4
+	dbMaxConns     = 100
+	totalWorker    = 100
+	csvFile        = "majestic_million.csv"
+	dataHeaders    = []string{
+		"GlobalRank",
+		"TldRank",
+		"Domain",
+		"TLD",
+		"RefSubNets",
+		"RefIPs",
+		"IDN_Domain",
+		"IDN_TLD",
+		"PrevGlobalRank",
+		"PrevTldRank",
+		"PrevRefSubNets",
+		"PrevRefIPs",
+	}
+)
 
-func HandlerDownloadReport(w http.ResponseWriter, r *http.Request) {
-	reportID := chi.URLParam(r, "reportID")
+func openDbConnection() (*sql.DB, error) {
+	log.Println("=> open db connection")
 
-	// construct the report path
-	reportName := fmt.Sprintf("report-%s.txt", reportID)
-	path := filepath.Join(os.TempDir(), reportName)
+	db, err := sql.Open("mysql", dbConnString)
+	if err != nil {
+		return nil, err
+	}
 
-	sharedProcessKey := fmt.Sprintf("generate %s", reportName)
-	_, err, shared := singleflightGroupDownloadReport.Do(sharedProcessKey, func() (interface{}, error) {
-		// if the report is not exists, generate it first.
-		// otherwise, immediatelly download it
-		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-			log.Println("generate report", reportName, path)
+	db.SetMaxOpenConns(dbMaxConns)
+	db.SetMaxIdleConns(dbMaxIdleConns)
 
-			// simulate long-running process to generate report
-			time.Sleep(5 * time.Second)
+	return db, nil
+}
 
-			f, err := os.Create(path)
-			if err != nil {
-				f.Close()
-				return nil, err
+func openCsvFile() (*csv.Reader, *os.File, error) {
+	log.Println("=> open csv file")
+
+	f, err := os.Open(csvFile)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	reader := csv.NewReader(f)
+	return reader, f, nil
+}
+
+func dispatchWorkers(db *sql.DB, jobs <-chan []interface{}, wg *sync.WaitGroup) {
+	for workerIndex := 0; workerIndex <= totalWorker; workerIndex++ {
+		go func(workerIndex int, db *sql.DB, jobs <-chan []interface{}, wg *sync.WaitGroup) {
+			counter := 0
+
+			for job := range jobs {
+				doTheJob(workerIndex, counter, db, job)
+				wg.Done()
+
+				counter++
 			}
 
-			f.Write([]byte("this is a report"))
-			f.Close()
-		}
-
-		return true, nil
-	})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if shared {
-		log.Printf("generation of report %v is shared with others", reportName)
-	}
-
-	// open the file, download it
-	f, err := os.OpenFile(path, os.O_RDONLY, 0644)
-	if f != nil {
-		defer f.Close()
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	contentDisposition := fmt.Sprintf("attachment; filename=%s", reportName)
-	w.Header().Set("Content-Disposition", contentDisposition)
-
-	if _, err := io.Copy(w, f); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		}(workerIndex, db, jobs, wg)
 	}
 }
 
-func main() {
-	r := chi.NewRouter()
-	r.Route("/api", func(r chi.Router) {
-		r.Get("/report/download/{reportID}", HandlerDownloadReport)
-	})
+func readCsvFilePerLineThenSendToWorker(csvReader *csv.Reader, jobs chan<- []interface{}, wg *sync.WaitGroup) {
+	for {
+		row, err := csvReader.Read()
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			break
+		}
 
-	host := ":8080"
-	fmt.Printf("starting web server at %s \n", host)
-	http.ListenAndServe(host, r)
+		if len(dataHeaders) == 0 {
+			dataHeaders = row
+			continue
+		}
+
+		rowOrdered := make([]interface{}, 0)
+		for _, each := range row {
+			rowOrdered = append(rowOrdered, each)
+		}
+
+		wg.Add(1)
+		jobs <- rowOrdered
+	}
+	close(jobs)
+}
+
+func doTheJob(workerIndex, counter int, db *sql.DB, values []interface{}) {
+	for {
+		var outerError error
+		func(outerError *error) {
+			defer func() {
+				if err := recover(); err != nil {
+					*outerError = fmt.Errorf("%v", err)
+				}
+			}()
+
+			conn, err := db.Conn(context.Background())
+			query := fmt.Sprintf("INSERT INTO domain (%s) VALUES (%s)",
+				strings.Join(dataHeaders, ","),
+				strings.Join(generateQuestionsMark(len(dataHeaders)), ","),
+			)
+
+			_, err = conn.ExecContext(context.Background(), query, values...)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+
+			err = conn.Close()
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+		}(&outerError)
+		if outerError == nil {
+			break
+		}
+	}
+
+	if counter%100 == 0 {
+		log.Println("=> worker", workerIndex, "inserted", counter, "data")
+	}
+}
+
+func generateQuestionsMark(n int) []string {
+	s := make([]string, 0)
+	for i := 0; i < n; i++ {
+		s = append(s, "?")
+	}
+	return s
+}
+
+func main() {
+	start := time.Now()
+
+	db, err := openDbConnection()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	csvReader, csvFile, err := openCsvFile()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	defer csvFile.Close()
+
+	jobs := make(chan []interface{}, 0)
+	wg := new(sync.WaitGroup)
+
+	go dispatchWorkers(db, jobs, wg)
+	readCsvFilePerLineThenSendToWorker(csvReader, jobs, wg)
+
+	wg.Wait()
+
+	duration := time.Since(start)
+	fmt.Println("done in", int(math.Ceil(duration.Seconds())), "seconds")
 }

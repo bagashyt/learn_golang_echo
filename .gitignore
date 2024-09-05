@@ -1,3 +1,6 @@
 #secret
 *.crt
 *.key
+
+#data
+*.csv
