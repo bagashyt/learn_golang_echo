@@ -1,13 +1,17 @@
-# JSON Web Token (JWT)
+# Dockerize Golang
 
-implement JSON Web Token
+using Docker to build Golang app
 
+## How to prepare docker
 
-## How to run program
-
-On terminal type 
+Create Container on code directory
 ```sh
-go run .
+docker build -t my-image-hello-world .
+```
+
+Start Container my-image-hello-world
+```sh
+docker run --name my-container-hello-world --rm -it -e PORT=8080 -e INSTANCE_ID="my first instance" -p 8080:8080 my-image-hello-world
 ```
 
 ## How to test
@@ -15,10 +19,8 @@ go run .
 with curl on terminal type:
 
 ```sh
-curl -X POST --user noval:kaliparejaya123 http://localhost:8080/login
+curl -X GET http://localhost:8080/
 ```
-after got the token you can use it to access /index
+with browser type:
 
-```sh
-curl -X GET --header "Authorization: Bearer <your Token>" http://localhost:8080/index
-```
+`http://localhost:8080/`
