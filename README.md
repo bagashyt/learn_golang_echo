@@ -1,26 +1,14 @@
-# Dockerize Golang
+# Redis
 
-using Docker to build Golang app
+implementing SET and GET data with Redis
 
-## How to prepare docker
+## How to prepare Redis
 
-Create Container on code directory
-```sh
-docker build -t my-image-hello-world .
-```
-
-Start Container my-image-hello-world
-```sh
-docker run --name my-container-hello-world --rm -it -e PORT=8080 -e INSTANCE_ID="my first instance" -p 8080:8080 my-image-hello-world
-```
+Setup Redis Locally following (documentation)["https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/install-redis-on-linux/"]
 
 ## How to test
 
-with curl on terminal type:
-
+run program on directory
 ```sh
-curl -X GET http://localhost:8080/
+go run main.go
 ```
-with browser type:
-
-`http://localhost:8080/`

@@ -1,41 +1,56 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
-	"net/http"
-	"os"
+	"time"
+
+	"github.com/go-redis/redis/v8"
 )
 
-func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		log.Fatal("PORT env is required")
-	}
+func newRedisClient(host string, password string) *redis.Client {
 
-	instanceID := os.Getenv("INSTANCE_ID")
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			http.Error(w, "http method not allowed", http.StatusBadRequest)
-			return
-		}
-
-		text := "Hello world"
-		if instanceID != "" {
-			text = text + ". From " + instanceID
-		}
-
-		w.Write([]byte(text))
+	client := redis.NewClient(&redis.Options{
+		Addr:     host,
+		Password: password,
+		DB:       0,
 	})
+	return client
+}
 
-	server := new(http.Server)
-	server.Handler = mux
-	server.Addr = "0.0.0.0:" + port
+func main() {
+	var redisHost = "localhost:6379"
+	var redisPassword = ""
 
-	log.Println("server starting at", server.Addr)
-	err := server.ListenAndServe()
-	if err != nil {
-		log.Fatal(err.Error())
+	rdb := newRedisClient(redisHost, redisPassword)
+	fmt.Println("redis client initialized")
+
+	key := "key-1"
+	data := "Hello Redis"
+	ttl := time.Duration(3) * time.Second
+
+	// store data using SET command
+	op1 := rdb.Set(context.Background(), key, data, ttl)
+	if err := op1.Err(); err != nil {
+		fmt.Printf("unable to SET data. error: %v", err)
+		return
 	}
+	log.Println("set operation success")
+
+	// to test after 4 second to Get data
+	// time.Sleep(time.Duration(4) * time.Second)
+
+	// get data
+	op2 := rdb.Get(context.Background(), key)
+	if err := op2.Err(); err != nil {
+		fmt.Printf("unable to GET data. error: %v", err)
+		return
+	}
+	res, err := op2.Result()
+	if err != nil {
+		fmt.Printf("unable to GET data. error: %v", err)
+		return
+	}
+	log.Println("get operation success. result:", res)
 }
