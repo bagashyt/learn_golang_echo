@@ -16,18 +16,6 @@ import (
 
 var singleflightGroupDownloadReport singleflight.Group
 
-func main() {
-
-	r := chi.NewRouter()
-	r.Route("/api", func(r chi.Router) {
-		r.Get("/report/download/{reportID}", HandlerDownloadReport)
-	})
-
-	host := ":8080"
-	fmt.Printf("starting web server at %s \n", host)
-	http.ListenAndServe(host, r)
-}
-
 func HandlerDownloadReport(w http.ResponseWriter, r *http.Request) {
 	reportID := chi.URLParam(r, "reportID")
 
@@ -37,27 +25,26 @@ func HandlerDownloadReport(w http.ResponseWriter, r *http.Request) {
 
 	sharedProcessKey := fmt.Sprintf("generate %s", reportName)
 	_, err, shared := singleflightGroupDownloadReport.Do(sharedProcessKey, func() (interface{}, error) {
-
-		// if the report is not exist, generate it first
-		// otherwise, intermediatelly download it
+		// if the report is not exists, generate it first.
+		// otherwise, immediatelly download it
 		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 			log.Println("generate report", reportName, path)
 
-			//simulate long-running process to generate report
+			// simulate long-running process to generate report
 			time.Sleep(5 * time.Second)
 
 			f, err := os.Create(path)
 			if err != nil {
 				f.Close()
 				return nil, err
-
 			}
+
 			f.Write([]byte("this is a report"))
 			f.Close()
 		}
+
 		return true, nil
 	})
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -70,9 +57,7 @@ func HandlerDownloadReport(w http.ResponseWriter, r *http.Request) {
 	f, err := os.OpenFile(path, os.O_RDONLY, 0644)
 	if f != nil {
 		defer f.Close()
-
 	}
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -85,6 +70,15 @@ func HandlerDownloadReport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
 
-	http.Error(w, "", http.StatusBadRequest)
+func main() {
+	r := chi.NewRouter()
+	r.Route("/api", func(r chi.Router) {
+		r.Get("/report/download/{reportID}", HandlerDownloadReport)
+	})
+
+	host := ":8080"
+	fmt.Printf("starting web server at %s \n", host)
+	http.ListenAndServe(host, r)
 }
