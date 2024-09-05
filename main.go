@@ -1,56 +1,90 @@
 package main
 
 import (
-	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	chi "github.com/go-chi/chi/v5"
+	"golang.org/x/sync/singleflight"
 )
 
-func newRedisClient(host string, password string) *redis.Client {
-
-	client := redis.NewClient(&redis.Options{
-		Addr:     host,
-		Password: password,
-		DB:       0,
-	})
-	return client
-}
+var singleflightGroupDownloadReport singleflight.Group
 
 func main() {
-	var redisHost = "localhost:6379"
-	var redisPassword = ""
 
-	rdb := newRedisClient(redisHost, redisPassword)
-	fmt.Println("redis client initialized")
+	r := chi.NewRouter()
+	r.Route("/api", func(r chi.Router) {
+		r.Get("/report/download/{reportID}", HandlerDownloadReport)
+	})
 
-	key := "key-1"
-	data := "Hello Redis"
-	ttl := time.Duration(3) * time.Second
+	host := ":8080"
+	fmt.Printf("starting web server at %s \n", host)
+	http.ListenAndServe(host, r)
+}
 
-	// store data using SET command
-	op1 := rdb.Set(context.Background(), key, data, ttl)
-	if err := op1.Err(); err != nil {
-		fmt.Printf("unable to SET data. error: %v", err)
-		return
-	}
-	log.Println("set operation success")
+func HandlerDownloadReport(w http.ResponseWriter, r *http.Request) {
+	reportID := chi.URLParam(r, "reportID")
 
-	// to test after 4 second to Get data
-	// time.Sleep(time.Duration(4) * time.Second)
+	// construct the report path
+	reportName := fmt.Sprintf("report-%s.txt", reportID)
+	path := filepath.Join(os.TempDir(), reportName)
 
-	// get data
-	op2 := rdb.Get(context.Background(), key)
-	if err := op2.Err(); err != nil {
-		fmt.Printf("unable to GET data. error: %v", err)
-		return
-	}
-	res, err := op2.Result()
+	sharedProcessKey := fmt.Sprintf("generate %s", reportName)
+	_, err, shared := singleflightGroupDownloadReport.Do(sharedProcessKey, func() (interface{}, error) {
+
+		// if the report is not exist, generate it first
+		// otherwise, intermediatelly download it
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			log.Println("generate report", reportName, path)
+
+			//simulate long-running process to generate report
+			time.Sleep(5 * time.Second)
+
+			f, err := os.Create(path)
+			if err != nil {
+				f.Close()
+				return nil, err
+
+			}
+			f.Write([]byte("this is a report"))
+			f.Close()
+		}
+		return true, nil
+	})
+
 	if err != nil {
-		fmt.Printf("unable to GET data. error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	log.Println("get operation success. result:", res)
+	if shared {
+		log.Printf("generation of report %v is shared with others", reportName)
+	}
+
+	// open the file, download it
+	f, err := os.OpenFile(path, os.O_RDONLY, 0644)
+	if f != nil {
+		defer f.Close()
+
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	contentDisposition := fmt.Sprintf("attachment; filename=%s", reportName)
+	w.Header().Set("Content-Disposition", contentDisposition)
+
+	if _, err := io.Copy(w, f); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Error(w, "", http.StatusBadRequest)
 }
