@@ -1,177 +1,120 @@
 package main
 
 import (
-	"context"
-	"database/sql"
-	"encoding/csv"
 	"fmt"
-	"io"
 	"log"
-	"math"
+	"net/http"
 	"os"
 	"strings"
-	"sync"
-	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/gorilla/websocket"
+	"github.com/novalagung/gubrak/v2"
 )
 
-var (
-	dbConnString   = "root@/test"
-	dbMaxIdleConns = 4
-	dbMaxConns     = 100
-	totalWorker    = 100
-	csvFile        = "majestic_million.csv"
-	dataHeaders    = []string{
-		"GlobalRank",
-		"TldRank",
-		"Domain",
-		"TLD",
-		"RefSubNets",
-		"RefIPs",
-		"IDN_Domain",
-		"IDN_TLD",
-		"PrevGlobalRank",
-		"PrevTldRank",
-		"PrevRefSubNets",
-		"PrevRefIPs",
-	}
+type M map[string]interface{}
+
+const (
+	MESSAGE_NEW_USER = "New User"
+	MESSAGE_CHAT     = "Chat"
+	MESSAGE_LEAVE    = "Leave"
 )
 
-func openDbConnection() (*sql.DB, error) {
-	log.Println("=> open db connection")
+var connections = make([]*WebSocketConnection, 0)
 
-	db, err := sql.Open("mysql", dbConnString)
-	if err != nil {
-		return nil, err
-	}
-
-	db.SetMaxOpenConns(dbMaxConns)
-	db.SetMaxIdleConns(dbMaxIdleConns)
-
-	return db, nil
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
 }
 
-func openCsvFile() (*csv.Reader, *os.File, error) {
-	log.Println("=> open csv file")
-
-	f, err := os.Open(csvFile)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	reader := csv.NewReader(f)
-	return reader, f, nil
+type SocketPayload struct {
+	Message string
 }
 
-func dispatchWorkers(db *sql.DB, jobs <-chan []interface{}, wg *sync.WaitGroup) {
-	for workerIndex := 0; workerIndex <= totalWorker; workerIndex++ {
-		go func(workerIndex int, db *sql.DB, jobs <-chan []interface{}, wg *sync.WaitGroup) {
-			counter := 0
-
-			for job := range jobs {
-				doTheJob(workerIndex, counter, db, job)
-				wg.Done()
-
-				counter++
-			}
-
-		}(workerIndex, db, jobs, wg)
-	}
+type SocketResponse struct {
+	From    string
+	Type    string
+	Message string
 }
 
-func readCsvFilePerLineThenSendToWorker(csvReader *csv.Reader, jobs chan<- []interface{}, wg *sync.WaitGroup) {
-	for {
-		row, err := csvReader.Read()
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			break
-		}
-
-		if len(dataHeaders) == 0 {
-			dataHeaders = row
-			continue
-		}
-
-		rowOrdered := make([]interface{}, 0)
-		for _, each := range row {
-			rowOrdered = append(rowOrdered, each)
-		}
-
-		wg.Add(1)
-		jobs <- rowOrdered
-	}
-	close(jobs)
-}
-
-func doTheJob(workerIndex, counter int, db *sql.DB, values []interface{}) {
-	for {
-		var outerError error
-		func(outerError *error) {
-			defer func() {
-				if err := recover(); err != nil {
-					*outerError = fmt.Errorf("%v", err)
-				}
-			}()
-
-			conn, err := db.Conn(context.Background())
-			query := fmt.Sprintf("INSERT INTO domain (%s) VALUES (%s)",
-				strings.Join(dataHeaders, ","),
-				strings.Join(generateQuestionsMark(len(dataHeaders)), ","),
-			)
-
-			_, err = conn.ExecContext(context.Background(), query, values...)
-			if err != nil {
-				log.Fatal(err.Error())
-			}
-
-			err = conn.Close()
-			if err != nil {
-				log.Fatal(err.Error())
-			}
-		}(&outerError)
-		if outerError == nil {
-			break
-		}
-	}
-
-	if counter%100 == 0 {
-		log.Println("=> worker", workerIndex, "inserted", counter, "data")
-	}
-}
-
-func generateQuestionsMark(n int) []string {
-	s := make([]string, 0)
-	for i := 0; i < n; i++ {
-		s = append(s, "?")
-	}
-	return s
+type WebSocketConnection struct {
+	*websocket.Conn
+	Username string
 }
 
 func main() {
-	start := time.Now()
 
-	db, err := openDbConnection()
-	if err != nil {
-		log.Fatal(err.Error())
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		content, err := os.ReadFile("index.html")
+		if err != nil {
+			http.Error(w, "Could not open requested file", http.StatusInternalServerError)
+			return
+		}
+
+		fmt.Fprintf(w, "%s", content)
+	})
+
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		currentGorillaConn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			http.Error(w, "Could not open websocket connection", http.StatusBadRequest)
+		}
+
+		username := r.URL.Query().Get("username")
+		currentConn := WebSocketConnection{Conn: currentGorillaConn, Username: username}
+		connections = append(connections, &currentConn)
+
+		go handleIO(&currentConn, connections)
+	})
+
+	fmt.Println("Server starting at :8080")
+	http.ListenAndServe(":8080", nil)
+}
+
+func handleIO(currentConn *WebSocketConnection, connections []*WebSocketConnection) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("ERROR", fmt.Sprintf("%v", r))
+		}
+
+	}()
+
+	broadcastMessage(currentConn, MESSAGE_NEW_USER, "")
+
+	for {
+		payload := SocketPayload{}
+		err := currentConn.ReadJSON(&payload)
+		if err != nil {
+			if strings.Contains(err.Error(), "websocket: close") {
+				broadcastMessage(currentConn, MESSAGE_LEAVE, "")
+				ejectConnection(currentConn)
+				return
+			}
+
+			log.Println("ERROR", err.Error())
+			continue
+		}
+
+		broadcastMessage(currentConn, MESSAGE_CHAT, payload.Message)
 	}
+}
 
-	csvReader, csvFile, err := openCsvFile()
-	if err != nil {
-		log.Fatal(err.Error())
+func ejectConnection(currentConn *WebSocketConnection) {
+	filtered := gubrak.From(connections).Reject(func(each *WebSocketConnection) bool {
+		return each == currentConn
+	}).Result()
+	connections = filtered.([]*WebSocketConnection)
+}
+
+func broadcastMessage(currentConn *WebSocketConnection, kind, message string) {
+	for _, eachConn := range connections {
+		if eachConn == currentConn {
+			continue
+		}
+
+		eachConn.WriteJSON(SocketResponse{
+			From:    currentConn.Username,
+			Type:    kind,
+			Message: message,
+		})
 	}
-	defer csvFile.Close()
-
-	jobs := make(chan []interface{}, 0)
-	wg := new(sync.WaitGroup)
-
-	go dispatchWorkers(db, jobs, wg)
-	readCsvFilePerLineThenSendToWorker(csvReader, jobs, wg)
-
-	wg.Wait()
-
-	duration := time.Since(start)
-	fmt.Println("done in", int(math.Ceil(duration.Seconds())), "seconds")
 }
